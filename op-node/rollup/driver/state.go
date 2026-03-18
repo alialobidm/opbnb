@@ -202,6 +202,8 @@ func (s *Driver) eventLoop() {
 
 	defer s.driverCancel()
 
+	go s.l1FinalizedEventLoop()
+
 	// stepReqCh is used to request that the driver attempts to step forward by one L1 block.
 	stepReqCh := make(chan struct{}, 1)
 
@@ -250,6 +252,7 @@ func (s *Driver) eventLoop() {
 		if len(sequencerCh) > 0 { // empty if not already drained before resetting
 			<-sequencerCh
 		}
+		log.Info("Plan sequencer action", "delay", delay)
 		sequencerTimer.Reset(delay)
 	}
 
@@ -269,7 +272,7 @@ func (s *Driver) eventLoop() {
 
 	// Create a ticker to check if there is a gap in the engine queue. Whenever
 	// there is, we send requests to sync source to retrieve the missing payloads.
-	syncCheckInterval := time.Duration(s.config.BlockTime) * time.Second * 2
+	syncCheckInterval := time.Duration(rollup.MillisecondBlockIntervalVolta) * time.Millisecond * 2
 	altSyncTicker := time.NewTicker(syncCheckInterval)
 	defer altSyncTicker.Stop()
 	lastUnsafeL2 := s.engineController.UnsafeL2Head()
@@ -409,12 +412,12 @@ func (s *Driver) eventLoop() {
 		case newL1Safe := <-s.l1SafeSig:
 			s.l1State.HandleNewL1SafeBlock(newL1Safe)
 			// no step, justified L1 information does not do anything for L2 derivation or status
-		case newL1Finalized := <-s.l1FinalizedSig:
-			s.l1State.HandleNewL1FinalizedBlock(newL1Finalized)
-			ctx, cancel := context.WithTimeout(s.driverCtx, time.Second*5)
-			s.finalizer.Finalize(ctx, newL1Finalized)
-			cancel()
-			reqStep() // we may be able to mark more L2 data as finalized now
+		// case newL1Finalized := <-s.l1FinalizedSig:
+		// 	s.l1State.HandleNewL1FinalizedBlock(newL1Finalized)
+		// 	ctx, cancel := context.WithTimeout(s.driverCtx, time.Second*5)
+		// 	s.finalizer.Finalize(ctx, newL1Finalized)
+		// 	cancel()
+		// 	reqStep() // we may be able to mark more L2 data as finalized now
 		case <-delayedStepReq:
 			delayedStepReq = nil
 			step()
@@ -438,7 +441,7 @@ func (s *Driver) eventLoop() {
 				continue
 			} else if err != nil && errors.Is(err, derive.ErrReset) {
 				// If the pipeline corrupts, e.g. due to a reorg, simply reset it
-				s.log.Warn("Derivation pipeline is reset", "err", err)
+				s.log.Warn("Derivation pipeline is reset", "l1 origin", s.derivation.Origin().Number, "err", err)
 				s.derivation.Reset()
 				s.metrics.RecordPipelineReset()
 				continue
@@ -501,6 +504,20 @@ func (s *Driver) eventLoop() {
 			}
 		case respCh := <-s.sequencerActive:
 			respCh <- !s.driverConfig.SequencerStopped
+		case <-s.driverCtx.Done():
+			return
+		}
+	}
+}
+
+func (s *Driver) l1FinalizedEventLoop() {
+	for {
+		select {
+		case newL1Finalized := <-s.l1FinalizedSig:
+			s.l1State.HandleNewL1FinalizedBlock(newL1Finalized)
+			ctx, cancel := context.WithTimeout(s.driverCtx, time.Second*5)
+			s.finalizer.Finalize(ctx, newL1Finalized)
+			cancel()
 		case <-s.driverCtx.Done():
 			return
 		}

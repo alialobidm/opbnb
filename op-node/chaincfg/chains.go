@@ -129,7 +129,7 @@ var OPBNBMainnet = rollup.Config{
 	},
 	BlockTime:              1,
 	MaxSequencerDrift:      600,
-	SeqWindowSize:          14400,
+	SeqWindowSize:          96000,
 	ChannelTimeout:         1200,
 	L1ChainID:              big.NewInt(56),
 	L2ChainID:              big.NewInt(204),
@@ -143,6 +143,8 @@ var OPBNBMainnet = rollup.Config{
 	DeltaTime:              u64Ptr(1718871000),  // Jun-20-2024 08:10 AM +UTC
 	EcotoneTime:            u64Ptr(1718871600),  // Jun-20-2024 08:20 AM +UTC
 	FjordTime:              u64Ptr(1727157600),  // Sep-24-2024 06:00 AM +UTC
+	VoltaTime:              u64Ptr(1745204400),  // Apr-21-2025 03:00 AM +UTC
+	FourierTime:            u64Ptr(1767754800),  // Jan-07-2026 03:00 AM +UTC
 }
 
 var OPBNBTestnet = rollup.Config{
@@ -165,7 +167,7 @@ var OPBNBTestnet = rollup.Config{
 	},
 	BlockTime:              1,
 	MaxSequencerDrift:      600,
-	SeqWindowSize:          14400,
+	SeqWindowSize:          96000,
 	ChannelTimeout:         1200,
 	L1ChainID:              big.NewInt(97),
 	L2ChainID:              big.NewInt(5611),
@@ -179,6 +181,8 @@ var OPBNBTestnet = rollup.Config{
 	DeltaTime:              u64Ptr(1715754000),   // May-15-2024 06:20 AM +UTC
 	EcotoneTime:            u64Ptr(1715754600),   // May-15-2024 06:30 AM +UTC
 	FjordTime:              u64Ptr(1725948000),   // Sep-10-2024 06:00 AM +UTC
+	VoltaTime:              u64Ptr(1743562800),   // Apr-02-2025 03:00 AM +UTC
+	FourierTime:            u64Ptr(1762398000),   // Nov-06-2025 03:00 AM +UTC
 }
 
 var OPBNBQANet = rollup.Config{
@@ -201,7 +205,7 @@ var OPBNBQANet = rollup.Config{
 	},
 	BlockTime:              1,
 	MaxSequencerDrift:      600,
-	SeqWindowSize:          14400,
+	SeqWindowSize:          96000,
 	ChannelTimeout:         1200,
 	L1ChainID:              big.NewInt(714),
 	L2ChainID:              big.NewInt(1081),
@@ -215,6 +219,7 @@ var OPBNBQANet = rollup.Config{
 	DeltaTime:              u64Ptr(0),
 	EcotoneTime:            u64Ptr(0),
 	FjordTime:              u64Ptr(1724392800), // AUG-23-2024 06:00 AM +UTC
+	VoltaTime:              u64Ptr(1743562800), // Apr-02-2025 03:00 AM +UTC
 }
 
 func u64Ptr(v uint64) *uint64 {

@@ -71,7 +71,7 @@ type safeDB interface {
 
 func NewL2Verifier(t Testing, log log.Logger, l1 derive.L1Fetcher, blobsSrc derive.L1BlobsFetcher, plasmaSrc driver.PlasmaIface, eng L2API, cfg *rollup.Config, syncCfg *sync.Config, safeHeadListener safeDB) *L2Verifier {
 	metrics := &testutils.TestDerivationMetrics{}
-	engine := derive.NewEngineController(eng, log, metrics, cfg, syncCfg)
+	engine := derive.NewEngineController(eng, log, metrics, cfg, syncCfg, false)
 
 	clSync := clsync.NewCLSync(log, cfg, metrics, engine)
 
@@ -82,7 +82,7 @@ func NewL2Verifier(t Testing, log log.Logger, l1 derive.L1Fetcher, blobsSrc deri
 		finalizer = finality.NewFinalizer(log, cfg, l1, engine)
 	}
 
-	attributesHandler := attributes.NewAttributesHandler(log, cfg, engine, eng)
+	attributesHandler := attributes.NewAttributesHandler(log, cfg, engine, eng, false)
 
 	pipeline := derive.NewDerivationPipeline(log, cfg, l1, blobsSrc, plasmaSrc, eng, engine, metrics,
 		syncCfg, safeHeadListener, finalizer, attributesHandler)

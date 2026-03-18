@@ -340,7 +340,7 @@ func (b *RawSpanBatch) encode(w io.Writer) error {
 
 // derive converts RawSpanBatch into SpanBatch, which has a list of SpanBatchElement.
 // We need chain config constants to derive values for making payload attributes.
-func (b *RawSpanBatch) derive(blockTime, genesisTimestamp uint64, chainID *big.Int) (*SpanBatch, error) {
+func (b *RawSpanBatch) derive(rollupCfg *rollup.Config, genesisTimestamp uint64, chainID *big.Int) (*SpanBatch, error) {
 	if b.blockCount == 0 {
 		return nil, ErrEmptySpanBatch
 	}
@@ -361,6 +361,33 @@ func (b *RawSpanBatch) derive(blockTime, genesisTimestamp uint64, chainID *big.I
 		return nil, err
 	}
 
+	var blockInterval uint64
+	var millisecondTimestamp bool
+	var isFourierfork bool
+	if rollupCfg.VoltaTime != nil && *rollupCfg.VoltaTime >= genesisTimestamp {
+		secondSinceVolta := *rollupCfg.VoltaTime - genesisTimestamp
+		if b.relTimestamp >= secondSinceVolta {
+			millisecondTimestamp = true
+			// check if batch time stamp has passed fourier fork
+			if rollupCfg.FourierTime != nil && *rollupCfg.FourierTime >= genesisTimestamp {
+				// Convert Fourier threshold to milliseconds since genesis for comparison
+				msSinceFourier := (*rollupCfg.FourierTime - genesisTimestamp) * 1000
+				if b.relTimestamp >= msSinceFourier {
+					blockInterval = rollup.MillisecondBlockIntervalFourier
+					isFourierfork = true
+				} else {
+					blockInterval = rollup.MillisecondBlockIntervalVolta
+				}
+			} else {
+				blockInterval = rollup.MillisecondBlockIntervalVolta
+			}
+		} else {
+			blockInterval = rollupCfg.BlockTime * 1000
+		}
+	} else {
+		blockInterval = rollupCfg.BlockTime * 1000
+	}
+
 	spanBatch := SpanBatch{
 		ParentCheck:   b.parentCheck,
 		L1OriginCheck: b.l1OriginCheck,
@@ -368,21 +395,40 @@ func (b *RawSpanBatch) derive(blockTime, genesisTimestamp uint64, chainID *big.I
 	txIdx := 0
 	for i := 0; i < int(b.blockCount); i++ {
 		batch := SpanBatchElement{}
-		batch.Timestamp = genesisTimestamp + b.relTimestamp + blockTime*uint64(i)
+		if millisecondTimestamp {
+			// relTimestamp and blockInterval has changed to millisecond
+			batch.Timestamp = genesisTimestamp*1000 + b.relTimestamp + blockInterval*uint64(i)
+		} else {
+			// relTimestamp is second timestamp before volta
+			batch.Timestamp = genesisTimestamp*1000 + b.relTimestamp*1000 + blockInterval*uint64(i)
+		}
+
 		batch.EpochNum = rollup.Epoch(blockOriginNums[i])
 		for j := 0; j < int(b.blockTxCounts[i]); j++ {
 			batch.Transactions = append(batch.Transactions, fullTxs[txIdx])
 			txIdx++
 		}
+
 		spanBatch.Batches = append(spanBatch.Batches, &batch)
+	}
+	if millisecondTimestamp {
+		log.Debug("succeed to build span batch with milliseconds timestamp",
+			"rel timestamp", b.relTimestamp,
+			"genesis timestamp", genesisTimestamp,
+			"start timestamp", spanBatch.GetTimestamp(),
+			"end timestamp", spanBatch.GetBlockTimestamp(spanBatch.GetBlockCount()-1),
+			"is_fourier", isFourierfork,
+			"is_millisecond", millisecondTimestamp,
+			"first l1 origin", spanBatch.GetStartEpochNum(),
+			"block count", spanBatch.GetBlockCount())
 	}
 	return &spanBatch, nil
 }
 
 // ToSpanBatch converts RawSpanBatch to SpanBatch,
 // which implements a wrapper of derive method of RawSpanBatch
-func (b *RawSpanBatch) ToSpanBatch(blockTime, genesisTimestamp uint64, chainID *big.Int) (*SpanBatch, error) {
-	spanBatch, err := b.derive(blockTime, genesisTimestamp, chainID)
+func (b *RawSpanBatch) ToSpanBatch(rollupCfg *rollup.Config, genesisTimestamp uint64, chainID *big.Int) (*SpanBatch, error) {
+	spanBatch, err := b.derive(rollupCfg, genesisTimestamp, chainID)
 	if err != nil {
 		return nil, err
 	}
@@ -548,16 +594,23 @@ func (b *SpanBatch) AppendSingularBatch(singularBatch *SingularBatch, seqNum uin
 }
 
 // ToRawSpanBatch merges SingularBatch List and initialize single RawSpanBatch
-func (b *SpanBatch) ToRawSpanBatch() (*RawSpanBatch, error) {
+func (b *SpanBatch) ToRawSpanBatch(cfg *rollup.Config) (*RawSpanBatch, error) {
 	if len(b.Batches) == 0 {
 		return nil, errors.New("cannot merge empty singularBatch list")
 	}
 	span_start := b.Batches[0]
 	span_end := b.Batches[len(b.Batches)-1]
 
+	relTs := uint64(0)
+	if cfg.IsVolta(span_start.Timestamp) {
+		relTs = span_start.Timestamp - b.GenesisTimestamp*1000
+	} else {
+		relTs = span_start.Timestamp - b.GenesisTimestamp
+	}
+
 	return &RawSpanBatch{
 		spanBatchPrefix: spanBatchPrefix{
-			relTimestamp:  span_start.Timestamp - b.GenesisTimestamp,
+			relTimestamp:  relTs,
 			l1OriginNum:   uint64(span_end.EpochNum),
 			parentCheck:   b.ParentCheck,
 			l1OriginCheck: b.L1OriginCheck,
@@ -578,7 +631,7 @@ func (b *SpanBatch) GetSingularBatches(l1Origins []eth.L1BlockRef, l2SafeHead et
 	var singularBatches []*SingularBatch
 	originIdx := 0
 	for _, batch := range b.Batches {
-		if batch.Timestamp <= l2SafeHead.Time {
+		if batch.Timestamp <= l2SafeHead.MillisecondTimestamp() {
 			continue
 		}
 		singularBatch := SingularBatch{
@@ -616,13 +669,13 @@ func NewSpanBatch(genesisTimestamp uint64, chainID *big.Int) *SpanBatch {
 }
 
 // DeriveSpanBatch derives SpanBatch from BatchData.
-func DeriveSpanBatch(batchData *BatchData, blockTime, genesisTimestamp uint64, chainID *big.Int) (*SpanBatch, error) {
+func DeriveSpanBatch(batchData *BatchData, rollupCfg *rollup.Config, genesisTimestamp uint64, chainID *big.Int) (*SpanBatch, error) {
 	rawSpanBatch, ok := batchData.inner.(*RawSpanBatch)
 	if !ok {
 		return nil, NewCriticalError(errors.New("failed type assertion to SpanBatch"))
 	}
 	// If the batch type is Span batch, derive block inputs from RawSpanBatch.
-	return rawSpanBatch.ToSpanBatch(blockTime, genesisTimestamp, chainID)
+	return rawSpanBatch.ToSpanBatch(rollupCfg, genesisTimestamp, chainID)
 }
 
 // ReadTxData reads raw RLP tx data from reader and returns txData and txType

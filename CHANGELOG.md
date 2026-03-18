@@ -1,5 +1,128 @@
 # Changelog
 
+
+## v0.5.5
+
+This release confirm the time of Mainnet Fourier Hardfork, effectively reducing the block time from 500 milliseconds to an impressive 250 milliseconds.
+
+- Mainnet: Jan-07-2026 03:00:00 AM +UTC
+
+All mainnet and nodes must upgrade to this release before the hardfork time.
+Also note that the `op-geth` should be upgraded to v0.5.9 accordingly, check [this](https://github.com/bnb-chain/op-geth/releases/tag/v0.5.9) for more details.
+
+### What's Changed
+
+* [\#319](https://github.com/bnb-chain/opbnb/pull/319)  feat: replace l1 head with l1 finalized block as sequencer and derivation head
+* [\#320](https://github.com/bnb-chain/opbnb/pull/320) fix: support compile opbnb in golang1.24.x and Windows OS
+* [\#324](https://github.com/bnb-chain/opbnb/pull/324) fix: safe stop during long time stop
+* [\#325](https://github.com/bnb-chain/opbnb/pull/325) fix: p2p node derivation occur empty root
+* [\#326](https://github.com/bnb-chain/opbnb/pull/326) fix: solve ref-metrics map concurrent use
+* [\#328](https://github.com/bnb-chain/opbnb/pull/328) fix: add Mainnet Fourier hardfork timestamp
+
+### Docker Images
+
+- ghcr.io/bnb-chain/op-node:v0.5.5
+- ghcr.io/bnb-chain/op-batcher:v0.5.5
+- ghcr.io/bnb-chain/op-proposer:v0.5.5
+
+**Full Changelog**: https://github.com/bnb-chain/opbnb/compare/v0.5.4...v0.5.5
+
+
+## v0.5.4
+
+This release introduces the implementation of Fourier Hardfork, effectively reducing the block time from 500 milliseconds to an impressive 250 milliseconds.
+This enhancement significantly improves transaction efficiency and overall network performance, allowing for faster processing and a more seamless experience for users.
+
+It is set to be activated on both the opBNB Mainnet and Testnet environments according to the following schedule:
+
+- Testnet: Nov-06-2025 03:00 AM +UTC
+- Mainnet: Early-Dec-2025
+
+All mainnet and testnet nodes must upgrade to this release before the hardfork time.
+Also note that the `op-geth` should be upgraded to v0.5.8 accordingly, check [this](https://github.com/bnb-chain/op-geth/releases/tag/v0.5.8) for more details.
+
+### What's Changed
+
+#### FEATURE
+* [\#305](https://github.com/bnb-chain/opbnb/pull/305) support Fourier hardfork
+
+### Docker Images
+- ghcr.io/bnb-chain/op-node:v0.5.4
+- ghcr.io/bnb-chain/op-batcher:v0.5.4
+- ghcr.io/bnb-chain/op-proposer:v0.5.4
+
+**Full Changelog**: https://github.com/bnb-chain/opbnb/compare/v0.5.3...v0.5.4
+
+
+## v0.5.3-hotfix
+
+This release is a hotfix that modifies the `SeqWindowSize` configuration.
+If not changed, opBNB will not function correctly for 3 hours after the BSC [BEP-524](https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-524.md) takes effect.
+As a result, it will be unable to recover. After the modification, this recovery time will be extended to 12 hours.
+
+### What's Changed
+
+* [\#285](https://github.com/bnb-chain/opbnb/pull/285) feat: change default seq window size
+
+### Docker Images
+- ghcr.io/bnb-chain/op-node:v0.5.3-hotfix
+- ghcr.io/bnb-chain/op-batcher:v0.5.3-hotfix
+- ghcr.io/bnb-chain/op-proposer:v0.5.3-hotfix
+
+**Full Changelog**: https://github.com/bnb-chain/opbnb/compare/v0.5.2...v0.5.3-hotfix
+
+## v0.5.3
+
+This release introduces the implementation of [BEP-543](https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-543.md), effectively reducing the block time from 1 second to an impressive 500 milliseconds.
+This enhancement significantly improves transaction efficiency and overall network performance, allowing for faster processing and a more seamless experience for users.
+
+It is set to be activated on both the opBNB Mainnet and Testnet environments according to the following schedule:
+
+- Testnet: Apr-02-2025 03:00 AM +UTC
+- Mainnet: Mid-Apr-2025
+
+All mainnet and testnet nodes must upgrade to this release before the hardfork time.
+Also note that the `op-geth` should be upgraded to v0.5.7 accordingly, check [this](https://github.com/bnb-chain/op-geth/releases/tag/v0.5.7) for more details.
+
+### What's Changed
+
+#### FEATURE
+* [\#265](https://github.com/bnb-chain/opbnb/pull/265) BEP-543 to shorten block interval
+
+### Docker Images
+- ghcr.io/bnb-chain/op-node:v0.5.3
+- ghcr.io/bnb-chain/op-batcher:v0.5.3
+- ghcr.io/bnb-chain/op-proposer:v0.5.3
+
+**Full Changelog**: https://github.com/bnb-chain/opbnb/compare/v0.5.2...v0.5.3
+
+## v0.5.2
+
+This is a minor release and must upgrade to this release before the Pascal & Prague hardforks time of BSC, supports EIP-7702.
+
+- Testnet: Feb-25-2025 06:00 AM +UTC
+- Mainnet: Late March.
+
+This release adds a new bootnode in the US region for testnet, improves sequencer recovery functionality, introduces a new engine_opSealPayload API, and updates documentation links.
+
+This release supports EIP-7702, op-node is compatible with type 7702 transactions from L1.
+
+### What's Changed
+
+* chore: add bootnode in us region(testnet) by @krish-nr in https://github.com/bnb-chain/opbnb/pull/249
+* feat: handle sequencer recover related logic by @krish-nr in https://github.com/bnb-chain/opbnb/pull/250
+* feat: add new engine_opSealPayload API  by @bnoieh in https://github.com/bnb-chain/opbnb/pull/248
+* doc: update outdated links in readme by @owen-reorg in https://github.com/bnb-chain/opbnb/pull/253
+* feat: EIP-7702 adaption by @krish-nr in https://github.com/bnb-chain/opbnb/pull/261
+
+### Docker Images
+
+- ghcr.io/bnb-chain/op-node:v0.5.2
+- ghcr.io/bnb-chain/op-batcher:v0.5.2
+- ghcr.io/bnb-chain/op-proposer:v0.5.2
+
+**Full Changelog**: https://github.com/bnb-chain/opbnb/compare/v0.5.1...v0.5.2
+
 ## v0.5.1
 
 This is a minor release and upgrading is optional.
@@ -262,7 +385,7 @@ https://github.com/bnb-chain/opbnb/compare/v0.3.0...v0.3.1
 
 ## v0.3.0
 
-This is a recommended release for op-node. This release brings in upstream updates, see https://github.com/bnb-chain/opbnb/pull/121 for the contents. This is also a ready release for the next planed fork, which will bring in canyon fork from upstream as well.
+This is a recommended release for op-node. This release brings in upstream updates, see https://github.com/bnb-chain/opbnb/pull/121 for the contents. This is also a ready release for the next planned fork, which will bring in canyon fork from upstream as well.
 
 ### User Facing Changes
 

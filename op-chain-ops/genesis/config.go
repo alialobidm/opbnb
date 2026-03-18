@@ -141,6 +141,12 @@ type DeployConfig struct {
 	// L2GenesisInteropTimeOffset is the number of seconds after genesis block that the Interop hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Interop.
 	L2GenesisInteropTimeOffset *hexutil.Uint64 `json:"l2GenesisInteropTimeOffset,omitempty"`
+	// L2GenesisVoltaTimeOffset is the number of seconds after genesis block that the Volta hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Volta.
+	L2GenesisVoltaTimeOffset *hexutil.Uint64 `json:"l2GenesisVoltaTimeOffset,omitempty"`
+	// L2GenesisFourierTimeOffset is the number of seconds after genesis block that the Fourier hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Fourier.
+	L2GenesisFourierTimeOffset *hexutil.Uint64 `json:"l2GenesisFourierTimeOffset,omitempty"`
 	// L2GenesisBlockExtraData is configurable extradata. Will default to []byte("BEDROCK") if left unspecified.
 	L2GenesisBlockExtraData []byte `json:"l2GenesisBlockExtraData"`
 	// ProxyAdminOwner represents the owner of the ProxyAdmin predeploy on L2.
@@ -305,6 +311,31 @@ type DeployConfig struct {
 	UseInterop bool `json:"useInterop,omitempty"`
 }
 
+func (d *DeployConfig) L1MillisecondBlockInterval() uint64 {
+	// convert second to millisecond
+	return d.L1BlockTime * 1000
+}
+
+func (d *DeployConfig) L2MillisecondBlockInterval() uint64 {
+	if d.L2BlockTime > 3 {
+		// has been millisecond
+		return d.L2BlockTime
+	}
+	// convert second to millisecond
+	return d.L2BlockTime * 1000
+}
+
+// L2SecondBlockInterval is just used by ut&e2e test.
+// TODO: ut&e2e need to be refined later.
+func (d *DeployConfig) L2SecondBlockInterval() uint64 {
+	if d.L2BlockTime <= 3 {
+		// has been second
+		return d.L2BlockTime
+	}
+	// convert millisecond to second
+	return d.L2BlockTime / 1000
+}
+
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
 // which makes it easier to maintain, we do not need efficiency in this case.
 func (d *DeployConfig) Copy() *DeployConfig {
@@ -434,9 +465,10 @@ func (d *DeployConfig) Check() error {
 			return fmt.Errorf("%w: GovernanceToken owner cannot be address(0)", ErrInvalidDeployConfig)
 		}
 	}
+
 	// L2 block time must always be smaller than L1 block time
-	if d.L1BlockTime < d.L2BlockTime {
-		return fmt.Errorf("L2 block time (%d) is larger than L1 block time (%d)", d.L2BlockTime, d.L1BlockTime)
+	if d.L1MillisecondBlockInterval() < d.L2MillisecondBlockInterval() {
+		return fmt.Errorf("L2 block interval ms (%d) is larger than L1 block interval ms (%d)", d.L2MillisecondBlockInterval(), d.L1MillisecondBlockInterval())
 	}
 	if d.RequiredProtocolVersion == (params.ProtocolVersion{}) {
 		log.Warn("RequiredProtocolVersion is empty")
@@ -585,6 +617,7 @@ func (d *DeployConfig) DeltaTime(genesisTime uint64) *uint64 {
 	return &v
 }
 
+// TODO judge if it is need to use milliseconds timestamp with the fork information
 func (d *DeployConfig) EcotoneTime(genesisTime uint64) *uint64 {
 	if d.L2GenesisEcotoneTimeOffset == nil {
 		return nil
@@ -624,6 +657,28 @@ func (d *DeployConfig) SnowTime(genesisTime uint64) *uint64 {
 	}
 	v := uint64(0)
 	if offset := *d.SnowTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) VoltaTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisVoltaTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisVoltaTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) FourierTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisFourierTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisFourierTimeOffset; offset > 0 {
 		v = genesisTime + uint64(offset)
 	}
 	return &v
@@ -706,6 +761,8 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		PlasmaConfig:           plasma,
 		Fermat:                 d.Fermat,
 		SnowTime:               d.SnowTime(l1StartBlock.Time()),
+		VoltaTime:              d.VoltaTime(l1StartBlock.Time()),
+		FourierTime:            d.FourierTime(l1StartBlock.Time()),
 	}, nil
 }
 

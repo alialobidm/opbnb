@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -41,15 +42,19 @@ type AttributesHandler struct {
 	ec Engine
 	l2 L2
 
+	l2P2PNode bool
+
 	attributes *derive.AttributesWithParent
 }
 
-func NewAttributesHandler(log log.Logger, cfg *rollup.Config, ec Engine, l2 L2) *AttributesHandler {
+func NewAttributesHandler(log log.Logger, cfg *rollup.Config, ec Engine, l2 L2, l2P2PNode bool) *AttributesHandler {
+	log.Info("new attributes handler", "l2_p2p_node", l2P2PNode)
 	return &AttributesHandler{
 		log:        log,
 		cfg:        cfg,
 		ec:         ec,
 		l2:         l2,
+		l2P2PNode:  l2P2PNode,
 		attributes: nil,
 	}
 }
@@ -92,6 +97,12 @@ func (eq *AttributesHandler) Proceed(ctx context.Context) error {
 		eq.attributes = nil
 		return nil
 	} else if eq.ec.PendingSafeL2Head().Number == eq.ec.UnsafeL2Head().Number {
+		if eq.l2P2PNode {
+			eq.log.Warn("pending_safe_l2_head_number is equal to unsafe_l2_head_number for p2p node waiting l2 block from gossip",
+				"p2p_node", eq.l2P2PNode, "pending_safe_l2_head_number", eq.ec.PendingSafeL2Head().Number,
+				"unsafe_l2_head_number", eq.ec.UnsafeL2Head().Number)
+			return nil
+		}
 		if err := eq.forceNextSafeAttributes(ctx, eq.attributes); err != nil {
 			return err
 		}
@@ -153,6 +164,9 @@ func (eq *AttributesHandler) forceNextSafeAttributes(ctx context.Context, attrib
 			_ = eq.ec.CancelPayload(ctx, true)
 			return derive.NewResetError(fmt.Errorf("need reset to resolve pre-state problem: %w", err))
 		case derive.BlockInsertPayloadErr:
+			if strings.Contains(err.Error(), "INCONSISTENT") {
+				return derive.NewTemporaryError(fmt.Errorf("temporarily cannot insert new safe block: %w", err))
+			}
 			_ = eq.ec.CancelPayload(ctx, true)
 			eq.log.Warn("could not process payload derived from L1 data, dropping batch", "err", err)
 			// Count the number of deposits to see if the tx list is deposit only.

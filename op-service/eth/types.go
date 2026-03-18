@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
 )
@@ -21,12 +22,20 @@ import (
 type ErrorCode int
 
 const (
-	UnknownPayload           ErrorCode = -32001 // Payload does not exist / is not available.
+	UnknownPayload           ErrorCode = -38001 // Payload does not exist / is not available.
 	InvalidForkchoiceState   ErrorCode = -38002 // Forkchoice state is invalid / inconsistent.
 	InvalidPayloadAttributes ErrorCode = -38003 // Payload attributes are invalid / inconsistent.
 )
 
+const (
+	GetPayloadStage        = "sealApiGetPayloadErrStage"
+	NewPayloadStage        = "sealApiNewPayloadErrStage"
+	ForkchoiceUpdatedStage = "sealApiForkchoiceUpdatedErrStage"
+)
+
 var ErrBedrockScalarPaddingNotEmpty = errors.New("version 0 scalar value has non-empty padding")
+
+const BlockMillisecondsIntervalUint uint64 = 250
 
 // InputError distinguishes an user-input error from regular rpc errors,
 // to help the (Engine) API user divert from accidental input mistakes.
@@ -190,6 +199,11 @@ type ExecutionPayload struct {
 	ExcessBlobGas *Uint64Quantity `json:"excessBlobGas,omitempty"`
 }
 
+func (payload *ExecutionPayload) MillisecondTimestamp() uint64 {
+	milliPart := uint64(payload.PrevRandao[0])*256 + uint64(payload.PrevRandao[1])
+	return uint64(payload.Timestamp)*1000 + milliPart
+}
+
 func (payload *ExecutionPayload) ID() BlockID {
 	return BlockID{Hash: payload.BlockHash, Number: uint64(payload.BlockNumber)}
 }
@@ -322,6 +336,36 @@ type PayloadAttributes struct {
 	GasLimit *Uint64Quantity `json:"gasLimit,omitempty"`
 }
 
+func (pa *PayloadAttributes) MillisecondTimestamp() uint64 {
+	milliPart := uint64(pa.PrevRandao[0])*256 + uint64(pa.PrevRandao[1])
+	return uint64(pa.Timestamp)*1000 + milliPart
+}
+
+// SetMillisecondTimestamp is used to set millisecond timestamp.
+// [32]byte PrevRandao
+// [0][1] represent l2 millisecond's mill part.
+func (pa *PayloadAttributes) SetMillisecondTimestamp(ts uint64, updateMilliSecond bool) {
+	pa.Timestamp = hexutil.Uint64(ts / 1000)
+	if updateMilliSecond {
+		milliPartBytes := uint256.NewInt(ts % 1000).Bytes32()
+		pa.PrevRandao[0] = milliPartBytes[30]
+		pa.PrevRandao[1] = milliPartBytes[31]
+
+		// count must occupy only one byte.
+		pa.PrevRandao[2] = uint256.NewInt(1).Bytes32()[31]
+	}
+}
+
+// SetMillisecondTimestamp is used to set millisecond timestamp.
+// [32]byte PrevRandao
+// [0][1] represent l2 millisecond's mill part.
+func (pa *PayloadAttributes) SetBlockIntervalCount(blockIntervalCount uint64) {
+	if blockIntervalCount > 255 {
+		log.Crit("overflow block millisecond block interval count", "blockIntervalCount", blockIntervalCount)
+	}
+	pa.PrevRandao[3] = uint256.NewInt(blockIntervalCount).Bytes32()[31]
+}
+
 type ExecutePayloadStatus string
 
 const (
@@ -365,6 +409,12 @@ type ForkchoiceUpdatedResult struct {
 	PayloadStatus PayloadStatusV1 `json:"payloadStatus"`
 	// the payload id if requested
 	PayloadID *PayloadID `json:"payloadId"`
+}
+
+type SealPayloadResponse struct {
+	ErrStage      string                    `json:"errStage"`
+	PayloadStatus PayloadStatusV1           `json:"payloadStatus"`
+	Payload       *ExecutionPayloadEnvelope `json:"payload"`
 }
 
 // SystemConfig represents the rollup system configuration that carries over in every L2 block,
@@ -512,4 +562,7 @@ const (
 
 	GetPayloadV2 EngineAPIMethod = "engine_getPayloadV2"
 	GetPayloadV3 EngineAPIMethod = "engine_getPayloadV3"
+
+	SealPayloadV2 EngineAPIMethod = "engine_opSealPayloadV2"
+	SealPayloadV3 EngineAPIMethod = "engine_opSealPayloadV3"
 )

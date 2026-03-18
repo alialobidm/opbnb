@@ -25,7 +25,7 @@ contract L2OutputOracle is Initializable, ISemver {
     /// @custom:network-specific
     uint256 public submissionInterval;
 
-    /// @notice The time between L2 blocks in seconds. Once set, this value MUST NOT be modified.
+    /// @notice The time between L2 blocks in seconds before Volta Hardfork. Once set, this value MUST NOT be modified.
     /// @custom:network-specific
     uint256 public l2BlockTime;
 
@@ -40,6 +40,18 @@ contract L2OutputOracle is Initializable, ISemver {
     /// @notice The minimum time (in seconds) that must elapse before a withdrawal can be finalized.
     /// @custom:network-specific
     uint256 public finalizationPeriodSeconds;
+
+    /// @notice The time between L2 blocks in milliseconds after Volta Hardfork.
+    uint256 public constant L2_MILLISECONDS_BLOCK_TIME = 500;
+
+    /// @notice The L2 block number of Volta Hardfork.
+    uint256 public constant VOLTA_BLOCK_NUMBER = 0;
+
+    /// @notice The time between L2 blocks in milliseconds after Fourier Hardfork.
+    uint256 public constant L2_FOURIER_MILLISECONDS_BLOCK_TIME = 250;
+
+    /// @notice The L2 block number of Fourier Hardfork.
+    uint256 public constant FOURIER_BLOCK_NUMBER = 0;
 
     /// @notice Emitted when an output is proposed.
     /// @param outputRoot    The output root.
@@ -150,6 +162,22 @@ contract L2OutputOracle is Initializable, ISemver {
         return finalizationPeriodSeconds;
     }
 
+    /// @notice Getter for the l2MillisecondsBlockTime.
+    ///         Public getter is legacy and will be removed in the future. Use `L2_MILLISECONDS_BLOCK_TIME` instead.
+    /// @return L2 block time in milliseconds.
+    /// @custom:legacy
+    function l2MillisecondsBlockTime() external pure returns (uint256) {
+        return L2_MILLISECONDS_BLOCK_TIME;
+    }
+
+    /// @notice Getter for the voltaBlockNumber.
+    ///         Public getter is legacy and will be removed in the future. Use `VOLTA_BLOCK_NUMBER` instead.
+    /// @return L2 block number of Volta Hardfork.
+    /// @custom:legacy
+    function voltaBlockNumber() external pure returns (uint256) {
+        return VOLTA_BLOCK_NUMBER;
+    }
+
     /// @notice Deletes all output proposals after and including the proposal that corresponds to
     ///         the given output index. Only the challenger address can delete outputs.
     /// @param _l2OutputIndex Index of the first L2 output to be deleted.
@@ -201,10 +229,7 @@ contract L2OutputOracle is Initializable, ISemver {
             "L2OutputOracle: block number must be equal to next expected block number"
         );
 
-        require(
-            computeL2Timestamp(_l2BlockNumber) < block.timestamp,
-            "L2OutputOracle: cannot propose L2 output in the future"
-        );
+        require(isL2TimestampValid(_l2BlockNumber), "L2OutputOracle: cannot propose L2 output in the future");
 
         require(_outputRoot != bytes32(0), "L2OutputOracle: L2 output proposal cannot be the zero hash");
 
@@ -307,10 +332,61 @@ contract L2OutputOracle is Initializable, ISemver {
         return latestBlockNumber() + submissionInterval;
     }
 
+    /// @notice Checks the given l2 block number is valid.
+    /// @param _l2BlockNumber The L2 block number of the target block.
+    /// @return True that can submit output root, otherwise false.
+    function isL2TimestampValid(uint256 _l2BlockNumber) public view returns (bool) {
+        uint256 l2Timestamp;
+        uint256 currentTimestamp;
+
+        if (_l2BlockNumber <= VOLTA_BLOCK_NUMBER) {
+            // Before Volta Hardfork: use seconds
+            l2Timestamp = computeL2Timestamp(_l2BlockNumber);
+            currentTimestamp = block.timestamp;
+        } else if (_l2BlockNumber <= FOURIER_BLOCK_NUMBER) {
+            // After Volta but before Fourier: use milliseconds
+            l2Timestamp = computeL2TimestampAfterVolta(_l2BlockNumber);
+            currentTimestamp = block.timestamp * 1000;
+        } else {
+            // After Fourier Hardfork: use milliseconds
+            l2Timestamp = computeL2TimestampAfterFourier(_l2BlockNumber);
+            currentTimestamp = block.timestamp * 1000;
+        }
+
+        return l2Timestamp < currentTimestamp;
+    }
+
     /// @notice Returns the L2 timestamp corresponding to a given L2 block number.
     /// @param _l2BlockNumber The L2 block number of the target block.
-    /// @return L2 timestamp of the given block.
+    /// @return L2 timestamp of the given block in seconds.
     function computeL2Timestamp(uint256 _l2BlockNumber) public view returns (uint256) {
         return startingTimestamp + ((_l2BlockNumber - startingBlockNumber) * l2BlockTime);
+    }
+
+    /// @notice Returns the L2 timestamp corresponding to a given L2 block number after Volta Hardfork.
+    /// @param _l2BlockNumber The L2 block number of the target block.
+    /// @return L2 timestamp of the given block in milliseconds.
+    function computeL2TimestampAfterVolta(uint256 _l2BlockNumber) public view returns (uint256) {
+        uint256 beforeVoltaBlockTime = (VOLTA_BLOCK_NUMBER - startingBlockNumber) * l2BlockTime * 1000;
+        uint256 afterVoltaBlockTime = (_l2BlockNumber - VOLTA_BLOCK_NUMBER) * L2_MILLISECONDS_BLOCK_TIME;
+        uint256 totalPassedBlockTime = beforeVoltaBlockTime + afterVoltaBlockTime;
+
+        return (startingTimestamp * 1000) + totalPassedBlockTime;
+    }
+
+    /// @notice Returns the L2 timestamp corresponding to a given L2 block number after Fourier Hardfork.
+    /// @param _l2BlockNumber The L2 block number of the target block.
+    /// @return L2 timestamp of the given block in milliseconds.
+    function computeL2TimestampAfterFourier(uint256 _l2BlockNumber) public view returns (uint256) {
+        // Time from start to Volta (1000 milliseconds per block)
+        uint256 beforeVoltaBlockTime = (VOLTA_BLOCK_NUMBER - startingBlockNumber) * l2BlockTime * 1000;
+        // Time from Volta to Fourier (500 milliseconds per block)
+        uint256 voltaToFourierBlockTime = (FOURIER_BLOCK_NUMBER - VOLTA_BLOCK_NUMBER) * L2_MILLISECONDS_BLOCK_TIME;
+        // Time from Fourier to target block (250 milliseconds per block)
+        uint256 afterFourierBlockTime = (_l2BlockNumber - FOURIER_BLOCK_NUMBER) * L2_FOURIER_MILLISECONDS_BLOCK_TIME;
+
+        uint256 totalPassedBlockTime = beforeVoltaBlockTime + voltaToFourierBlockTime + afterFourierBlockTime;
+
+        return (startingTimestamp * 1000) + totalPassedBlockTime;
     }
 }
